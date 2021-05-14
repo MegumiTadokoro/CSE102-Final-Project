@@ -29,19 +29,18 @@ class NaiveUniverse(Universe):
     def n(self):
         return self.__n
     
+    @property
     def m(self):
         return self.__m
     
-    @property
     def get(self, i, j):
         return self.__cells[i][j]
     
-    @get.setter
     def toggle(self, i, j):
-        self.__cell[i][j] ^= 1
+        self.__cells[i][j] ^= True
     
     """Compute the number of alive neighbors"""
-    def getAliveNeighbors(self, x, y):
+    def __getAliveNeighbors(self, x, y):
         cnt = 0
         for dx in range(x-1, x+2):
             for dy in range(y-1, y+2): 
@@ -51,17 +50,19 @@ class NaiveUniverse(Universe):
     
     """Compute the next generation of naive universe"""
     def round(self):
+        toggle = set()
         for i in range(self.n):
             for j in range(self.m):
-                aliveNeighbors = self.getAliveNeighbors(i, j)
-                if self.get(i, j) and (aliveNeighbors < 2 or aliveNeighbors > 3): self.toggle(i, j)
-                if not self.get(i, j) and aliveNeighbors == 3: self.toggle(i, j)
+                aliveNeighbors = self.__getAliveNeighbors(i, j)
+                if self.get(i, j) and (aliveNeighbors < 2 or aliveNeighbors > 3): toggle.add((i, j))
+                if not self.get(i, j) and aliveNeighbors == 3: toggle.add((i, j))
+        for (i, j) in toggle: self.toggle(i, j)
 
 class AbstractNode:
     @property
     def level(self):
         """Level of this node"""
-        raise NotImplementedError()
+        return self.ne.level + 1 if self.ne is not None else 1
 
     @property
     def population(self):
@@ -75,48 +76,67 @@ class AbstractNode:
     
     @staticmethod
     def zero(k):
-        node = AbstractNode()
-        if k > 0: 
-            node.nw = node.zero(k-1)
-            node.ne = node.zero(k-1)
-            node.sw = node.zero(k-1)
-            node.se = node.zero(k-1)
-        return node
+        if k > 0:
+            return Node( \
+                AbstractNode().zero(k-1), \
+                AbstractNode().zero(k-1), \
+                AbstractNode().zero(k-1), \
+                AbstractNode().zero(k-1))
+        else: return CellNode(False)
     
     def extend(self):
-        node = AbstractNode()
-        node.nw = node.zero(self.level)
-        node.ne = node.zero(self.level)
-        node.sw = node.zero(self.level)
-        node.se = node.zero(self.level)
-        
         if self.level == 0:
-            node.ne = self
+            return Node(CellNode(False), self, CellNode(False), CellNode(False))
         else:
-            node.nw.se = self.nw
-            node.ne.sw = self.ne
-            node.sw.ne = self.sw
-            node.se.nw = self.se
+            k = self.level - 1
+            nw = Node(AbstractNode().zero(k), \
+                      AbstractNode().zero(k), \
+                      AbstractNode().zero(k), \
+                      self.nw)
             
-        return node
+            ne = Node(AbstractNode().zero(k), \
+                      AbstractNode().zero(k), \
+                      self.ne, \
+                      AbstractNode().zero(k))
+            
+            sw = Node(AbstractNode().zero(k), \
+                      self.sw, \
+                      AbstractNode().zero(k), \
+                      AbstractNode().zero(k))
+            
+            se = Node(self.se, \
+                      AbstractNode().zero(k), \
+                      AbstractNode().zero(k), \
+                      AbstractNode().zero(k))
+            return Node(nw, ne, sw, se) 
     
     def forward(self):
         if self.level < 2: return None
         elif self.level == 2:
             # temporary variable
-            temp = [[0 for _ in range(4)] for _ in range(4)]
-            newTab = [[0 for _ in range(4)] for _ in range(4)]
+            temp = [[False for _ in range(4)] for _ in range(4)]
+            newTab = [[False for _ in range(4)] for _ in range(4)]
             
             # translate to table representation
-            for i in range(4):
-                if i == 0: node = self.nw
-                if i == 1: node = self.ne
-                if i == 2: node = self.sw
-                if i == 3: node = self.se
-                temp[i][0] = node.nw
-                temp[i][1] = node.ne
-                temp[i][2] = node.sw
-                temp[i][3] = node.se
+            temp[0][0] = self.nw.nw.alive
+            temp[0][1] = self.nw.ne.alive
+            temp[0][2] = self.ne.nw.alive
+            temp[0][3] = self.ne.ne.alive
+            
+            temp[1][0] = self.nw.sw.alive
+            temp[1][1] = self.nw.se.alive
+            temp[1][2] = self.ne.sw.alive
+            temp[1][3] = self.ne.se.alive
+            
+            temp[2][0] = self.sw.nw.alive
+            temp[2][1] = self.sw.ne.alive
+            temp[2][2] = self.se.nw.alive
+            temp[2][3] = self.se.ne.alive
+            
+            temp[3][0] = self.sw.sw.alive
+            temp[3][1] = self.sw.se.alive
+            temp[3][2] = self.se.sw.alive
+            temp[3][3] = self.se.se.alive
             
             # compute the next generation
             for x in range(4):
@@ -127,24 +147,41 @@ class AbstractNode:
                     for dx in range(x-1, x+2):
                         for dy in range(y-1, y+2):
                             if dx == x and dy == y: continue
-                            if dx >= 0 and dx < 4 and dy >= 0 and dy < 4 and temp[x][y]: cnt += 1
+                            if dx >= 0 and dx < 4 and dy >= 0 and dy < 4 and temp[dx][dy]: cnt += 1
                     
                     # Conway's rule
                     if not temp[x][y]: newTab[x][y] = (cnt == 3)
                     else: newTab[x][y] = (cnt == 2 or cnt == 3)
             
             # translate to QuadTree representation
-            for i in range(4):
-                if i == 0: node = self.nw
-                if i == 1: node = self.ne
-                if i == 2: node = self.sw
-                if i == 3: node = self.se
-                node.nw = newTab[i][0]
-                node.ne = newTab[i][1]
-                node.sw = newTab[i][2]
-                node.se = newTab[i][3]
+            return Node(CellNode((newTab[1][1])), \
+                        CellNode((newTab[1][2])), \
+                        CellNode((newTab[2][1])), \
+                        CellNode((newTab[2][2])))
         else:
-            pass
+            # the variables' name follow notation used in statement
+            
+            # Step 1: calculate the first 2^(k-3) generations
+            R_nw = self.nw.forward()
+            R_tc = Node(self.nw.ne, self.ne.nw, self.nw.se, self.ne.sw).forward()
+            R_ne = self.ne.forward()
+            
+            R_cl = Node(self.nw.sw, self.nw.se, self.sw.nw, self.sw.ne).forward()
+            R_cc = Node(self.nw.se, self.ne.sw, self.sw.ne, self.se.nw).forward()
+            R_cr = Node(self.ne.sw, self.ne.se, self.se.nw, self.se.ne).forward()
+            
+            R_sw = self.sw.forward()
+            R_bc = Node(self.sw.ne, self.se.nw, self.sw.se, self.se.sw).forward()
+            R_se = self.se.forward()
+            
+            # Step 2: calculate the second 2^(k-3) generations
+            
+            B_nw = Node(R_nw, R_tc, R_cl, R_cc).forward()
+            B_ne = Node(R_tc, R_ne, R_cc, R_cr).forward()
+            B_sw = Node(R_cl, R_cc, R_sw, R_bc).forward()
+            B_se = Node(R_cc, R_cr, R_bc, R_se).forward()
+            
+            return Node(B_nw, B_ne, B_sw, B_se)
                         
             
 class CellNode(AbstractNode):
