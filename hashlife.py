@@ -2,8 +2,15 @@
 """
 Created on Tue May  4 15:51:32 2021
 
-@author: ngdda
+@author: Nguyen Doan Dai
 """
+
+import weakref, math
+
+HC = weakref.WeakValueDictionary()
+
+def hc(s):
+    return HC.setdefault(s, s)
 
 class Universe:
     def round(self):
@@ -19,6 +26,9 @@ class Universe:
         for _i in range(n):
             self.round()
 
+"""
+Question 1: 
+"""
 class NaiveUniverse(Universe):
     def __init__(self, n, m, cells):
         self.__n = n
@@ -59,6 +69,39 @@ class NaiveUniverse(Universe):
         for (i, j) in toggle: self.toggle(i, j)
 
 class AbstractNode:
+    def __init__(self):
+        # for the purpose of memoization
+        self._cache = None
+        
+        # for the purposse of hash-consing
+        self._hash = None
+    
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = (
+                self.population,
+                self.level     ,
+                self.nw        ,
+                self.ne        ,
+                self.sw        ,
+                self.se        ,
+            )
+            self._hash = hash(self._hash)
+        return self._hash
+        
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not isinstance(other, AbstractNode):
+            return False
+        return \
+            self.level      == other.level      and \
+            self.population == other.population and \
+            self.nw         is other.nw         and \
+            self.ne         is other.ne         and \
+            self.sw         is other.sw         and \
+            self.se         is other.se
+    
     @property
     def level(self):
         """Level of this node"""
@@ -73,46 +116,72 @@ class AbstractNode:
     ne = property(lambda self : None)
     sw = property(lambda self : None)
     se = property(lambda self : None)
-    
+      
+    """
+    Question 2: 
+    """
     @staticmethod
     def zero(k):
         if k > 0:
-            return Node( \
+            return AbstractNode().node( \
                 AbstractNode().zero(k-1), \
                 AbstractNode().zero(k-1), \
                 AbstractNode().zero(k-1), \
                 AbstractNode().zero(k-1))
-        else: return CellNode(False)
-    
+        else: return AbstractNode().cell(False)
+      
+    """
+    Question 3: 
+    """
     def extend(self):
         if self.level == 0:
-            return Node(CellNode(False), self, CellNode(False), CellNode(False))
+            return AbstractNode().node(AbstractNode().cell(False), self, AbstractNode().cell(False), AbstractNode().cell(False))
         else:
             k = self.level - 1
-            nw = Node(AbstractNode().zero(k), \
+            nw = AbstractNode().node(AbstractNode().zero(k), \
                       AbstractNode().zero(k), \
                       AbstractNode().zero(k), \
                       self.nw)
             
-            ne = Node(AbstractNode().zero(k), \
+            ne = AbstractNode().node(AbstractNode().zero(k), \
                       AbstractNode().zero(k), \
                       self.ne, \
                       AbstractNode().zero(k))
             
-            sw = Node(AbstractNode().zero(k), \
+            sw = AbstractNode().node(AbstractNode().zero(k), \
                       self.sw, \
                       AbstractNode().zero(k), \
                       AbstractNode().zero(k))
             
-            se = Node(self.se, \
+            se = AbstractNode().node(self.se, \
                       AbstractNode().zero(k), \
                       AbstractNode().zero(k), \
                       AbstractNode().zero(k))
-            return Node(nw, ne, sw, se) 
-    
+            return AbstractNode().node(nw, ne, sw, se) 
+      
+    """
+    Question 4, 5, and 8: 
+    """
     def forward(self):
         if self.level < 2: return None
+        
+        """
+        Question 9: it's trivial to see an universe with no population will not
+        evolve, hence one does not need to make any calculation, and can return
+        immediately an empty universe of appropriate size.
+        """
+        
+        if self.population == 0:
+            return self.zero(self.level - 1)
+        
+        """
+        Question 5:
+        """
+        if self._cache is not None: return self._cache
         elif self.level == 2:
+            
+            """
+            Original implementation____________________________________________
             # temporary variable
             temp = [[False for _ in range(4)] for _ in range(4)]
             newTab = [[False for _ in range(4)] for _ in range(4)]
@@ -154,35 +223,121 @@ class AbstractNode:
                     else: newTab[x][y] = (cnt == 2 or cnt == 3)
             
             # translate to QuadTree representation
-            return Node(CellNode((newTab[1][1])), \
-                        CellNode((newTab[1][2])), \
-                        CellNode((newTab[2][1])), \
-                        CellNode((newTab[2][2])))
+            """
+            """
+            Question 5:
+            """
+            """
+            self._cache = AbstractNode().node(AbstractNode().cell((newTab[1][1])), \
+                                              AbstractNode().cell((newTab[1][2])), \
+                                              AbstractNode().cell((newTab[2][1])), \
+                                              AbstractNode().cell((newTab[2][2])))
+            __________________________________________________________________
+            """
+            
+            """
+            Question 10:
+            """
+            # Creating word w
+            w = 0
+            w |= self.nw.nw.alive << 15
+            w |= self.nw.ne.alive << 14
+            w |= self.ne.nw.alive << 13
+            w |= self.ne.ne.alive << 12
+            
+            w |= self.nw.sw.alive << 11
+            w |= self.nw.se.alive << 10
+            w |= self.ne.sw.alive << 9
+            w |= self.ne.se.alive << 8
+            
+            w |= self.sw.nw.alive << 7
+            w |= self.sw.ne.alive << 6
+            w |= self.se.nw.alive << 5
+            w |= self.se.ne.alive << 4
+            
+            w |= self.sw.sw.alive << 3
+            w |= self.sw.se.alive << 2
+            w |= self.se.sw.alive << 1
+            w |= self.se.se.alive
+            
+            #Bit-masking
+            mask = 0b11101010111
+            cnt = 0
+            
+            #se
+            wp = w & mask
+            while wp: cnt += 1; wp &= (wp - 1)
+            se = (((w>>5)&1) and cnt == 2) or cnt == 3
+            
+            #sw
+            cnt = 0; wp = w & (mask << 1)
+            while wp: cnt += 1; wp &= (wp - 1)
+            sw = (((w>>6)&1) and cnt == 2) or cnt == 3
+            
+            #ne
+            cnt = 0; wp = w & (mask << 4)
+            while wp: cnt += 1; wp &= (wp - 1)
+            ne = (((w>>9)&1) and cnt == 2) or cnt == 3
+            
+            #nw
+            cnt = 0; wp = w & (mask << 5)
+            while wp: cnt += 1; wp &= (wp - 1)
+            nw = (((w>>10)&1) and cnt == 2) or cnt == 3
+            
+            self._cache = AbstractNode().node(AbstractNode().cell(nw), \
+                                              AbstractNode().cell(ne), \
+                                              AbstractNode().cell(sw), \
+                                              AbstractNode().cell(se))
         else:
             # the variables' name follow notation used in statement
             
             # Step 1: calculate the first 2^(k-3) generations
             R_nw = self.nw.forward()
-            R_tc = Node(self.nw.ne, self.ne.nw, self.nw.se, self.ne.sw).forward()
+            R_tc = AbstractNode().node(self.nw.ne, self.ne.nw, self.nw.se, self.ne.sw).forward()
             R_ne = self.ne.forward()
             
-            R_cl = Node(self.nw.sw, self.nw.se, self.sw.nw, self.sw.ne).forward()
-            R_cc = Node(self.nw.se, self.ne.sw, self.sw.ne, self.se.nw).forward()
-            R_cr = Node(self.ne.sw, self.ne.se, self.se.nw, self.se.ne).forward()
+            R_cl = AbstractNode().node(self.nw.sw, self.nw.se, self.sw.nw, self.sw.ne).forward()
+            R_cc = AbstractNode().node(self.nw.se, self.ne.sw, self.sw.ne, self.se.nw).forward()
+            R_cr = AbstractNode().node(self.ne.sw, self.ne.se, self.se.nw, self.se.ne).forward()
             
             R_sw = self.sw.forward()
-            R_bc = Node(self.sw.ne, self.se.nw, self.sw.se, self.se.sw).forward()
+            R_bc = AbstractNode().node(self.sw.ne, self.se.nw, self.sw.se, self.se.sw).forward()
             R_se = self.se.forward()
             
             # Step 2: calculate the second 2^(k-3) generations
             
-            B_nw = Node(R_nw, R_tc, R_cl, R_cc).forward()
-            B_ne = Node(R_tc, R_ne, R_cc, R_cr).forward()
-            B_sw = Node(R_cl, R_cc, R_sw, R_bc).forward()
-            B_se = Node(R_cc, R_cr, R_bc, R_se).forward()
+            B_nw = AbstractNode().node(R_nw, R_tc, R_cl, R_cc).forward()
+            B_ne = AbstractNode().node(R_tc, R_ne, R_cc, R_cr).forward()
+            B_sw = AbstractNode().node(R_cl, R_cc, R_sw, R_bc).forward()
+            B_se = AbstractNode().node(R_cc, R_cr, R_bc, R_se).forward()
             
-            return Node(B_nw, B_ne, B_sw, B_se)
-                        
+            """
+            Question 5:
+            """
+            self._cache = AbstractNode().node(B_nw, B_ne, B_sw, B_se)
+            
+        return self._cache
+    
+    """
+    Question 6:
+    """
+    @staticmethod
+    def canon(node):
+        return HC.setdefault(node, default = node)
+    
+    """
+    Question 7:
+    """
+    @staticmethod
+    def cell(alive):
+        return AbstractNode().canon(CellNode(alive))
+    
+    """
+    Question 7:
+    """
+    @staticmethod
+    def node(nw, ne, sw, se):
+        return AbstractNode().canon(Node(nw, ne, sw, se))
             
 class CellNode(AbstractNode):
     def __init__(self, alive):
@@ -216,3 +371,83 @@ class Node(AbstractNode):
     ne = property(lambda self : self._ne)
     sw = property(lambda self : self._sw)
     se = property(lambda self : self._se)
+
+#------------------------------------------------------------------------------
+class HashLifeUniverse(Universe):
+    def __init__(self, *args):
+        if len(args) == 1:
+            self._root = args[0]
+        else:
+            self._root = HashLifeUniverse.load(*args)
+
+        self._generation = 0
+
+    @staticmethod
+    def load(n, m, cells):
+        level = math.ceil(math.log(max(1, n, m), 2))
+
+        mkcell = getattr(AbstractNode, 'cell', CellNode)
+        mknode = getattr(AbstractNode, 'node', Node    )
+
+        def get(i, j):
+            i, j = i + n // 2, j + m // 2
+            return \
+                i in range(n) and \
+                j in range(m) and \
+                cells[i][j]
+                
+        def create(i, j, level):
+            if level == 0:
+                return mkcell(get (i, j))
+
+            noffset = 1 if level < 2 else 1 << (level - 2)
+            poffset = 0 if level < 2 else 1 << (level - 2)
+
+            nw = create(i-noffset, j+poffset, level - 1)
+            sw = create(i-noffset, j-noffset, level - 1)
+            ne = create(i+poffset, j+poffset, level - 1)
+            se = create(i+poffset, j-noffset, level - 1)
+
+            return mknode(nw=nw, ne=ne, sw=sw, se=se)
+                
+        return create(0, 0, level)
+    
+    """
+    Question 11:
+    """
+    def get(self, i, j):
+        try:
+            level = self._root.level
+            if i == 0 and j == 0: return self._root.alive
+            x = (i<<1) + (1 << (level - 1))
+            y = (j<<1) + (1 << (level - 1))
+            if i < 0 and j < 0: return self._root.nw.get(x, y)
+            if i < 0 and j > 0: return self._root.sw.get(x, y)
+            if i > 0 and j < 0: return self._root.ne.get(x, y)
+            if i > 0 and j > 0: return self._root.se.get(x, y)
+            return None
+        except AttributeError:
+            return False
+    
+    """
+    Question 12:
+    """
+    def extend(self, k):
+        treeExtended =  self._root.extend()
+        while treeExtended.level < max(k, 2): treeExtended = treeExtended.extend()
+        return treeExtended
+
+    def rounds(self, n):
+        # Do something here
+        raise NotImplementedError()
+
+    def round(self):
+        return self.rounds(1)
+
+    @property
+    def root(self):
+        return self._root
+        
+    @property
+    def generation(self):
+        return self._generation
