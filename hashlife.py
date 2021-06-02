@@ -4,8 +4,12 @@ Created on Tue May  4 15:51:32 2021
 
 @author: Nguyen Doan Dai
 """
-
 import weakref, math
+
+GROUP = [
+  "doan-dai.nguyen@polytechnique.edu",
+  "zarko.bulic@polytechnique.edu>",
+]
 
 HC = weakref.WeakValueDictionary()
 
@@ -158,7 +162,7 @@ class AbstractNode:
                       AbstractNode().zero(k), \
                       AbstractNode().zero(k))
             return AbstractNode().node(nw, ne, sw, se) 
-      
+    
     """
     Question 4, 5, and 8: 
     """
@@ -323,7 +327,7 @@ class AbstractNode:
     """
     @staticmethod
     def canon(node):
-        return HC.setdefault(node, default = node)
+        return hc(node)
     
     """
     Question 7:
@@ -371,6 +375,41 @@ class Node(AbstractNode):
     ne = property(lambda self : self._ne)
     sw = property(lambda self : self._sw)
     se = property(lambda self : self._se)
+    
+    """
+    Question 10:
+    """
+    @staticmethod
+    def level2_bitmask(w):
+        # Creating word w
+            #Bit-masking
+            mask = 0b11101010111
+            cnt = 0
+            
+            #se
+            wp = w & mask
+            while wp: cnt += 1; wp &= (wp - 1)
+            se = (((w>>5)&1) and cnt == 2) or cnt == 3
+            
+            #sw
+            cnt = 0; wp = w & (mask << 1)
+            while wp: cnt += 1; wp &= (wp - 1)
+            sw = (((w>>6)&1) and cnt == 2) or cnt == 3
+            
+            #ne
+            cnt = 0; wp = w & (mask << 4)
+            while wp: cnt += 1; wp &= (wp - 1)
+            ne = (((w>>9)&1) and cnt == 2) or cnt == 3
+            
+            #nw
+            cnt = 0; wp = w & (mask << 5)
+            while wp: cnt += 1; wp &= (wp - 1)
+            nw = (((w>>10)&1) and cnt == 2) or cnt == 3
+            
+            return AbstractNode().node(AbstractNode().cell(nw), \
+                                              AbstractNode().cell(ne), \
+                                              AbstractNode().cell(sw), \
+                                              AbstractNode().cell(se))
 
 #------------------------------------------------------------------------------
 class HashLifeUniverse(Universe):
