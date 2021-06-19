@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jun 18 22:43:34 2021
-
-@author: Zare
-"""
-
-# -*- coding: utf-8 -*-
-"""
 Created on Tue May  4 15:51:32 2021
 
 @author: Nguyen Doan Dai
@@ -15,11 +8,11 @@ import weakref, math
 
 GROUP = [
   "doan-dai.nguyen@polytechnique.edu",
-  "zarko.bulic@polytechnique.edu",
+  "zarko.bulic@polytechnique.edu>",
 ]
 
 HC = weakref.WeakValueDictionary()
-zero_dict = dict()
+
 def hc(s):
     return HC.setdefault(s, s)
 
@@ -80,7 +73,6 @@ class NaiveUniverse(Universe):
         for (i, j) in toggle: self.toggle(i, j)
 
 class AbstractNode:
-    BIG = True
     def __init__(self):
         # for the purpose of memoization
         self._cache = None
@@ -134,15 +126,13 @@ class AbstractNode:
     """
     @staticmethod
     def zero(k):
-        if k == 0: return AbstractNode().cell(False)
-        if k in zero_dict:
-            return zero_dict[k]
-        else:
-            a = AbstractNode().zero(k-1)
-            zeros = AbstractNode().node(a, a, a, a)
-            zero_dict[k] = zeros
-            return zeros
-        
+        if k > 0:
+            return AbstractNode().node( \
+                AbstractNode().zero(k-1), \
+                AbstractNode().zero(k-1), \
+                AbstractNode().zero(k-1), \
+                AbstractNode().zero(k-1))
+        else: return AbstractNode().cell(False)
       
     """
     Question 3: 
@@ -352,36 +342,6 @@ class AbstractNode:
     @staticmethod
     def node(nw, ne, sw, se):
         return AbstractNode().canon(Node(nw, ne, sw, se))
-    
-    """
-    Question 11
-    """
-    def get(self, i, j):
-            level = self.level
-            if level == 1:
-                if i == -1 and j == -1: return self.sw.get(i,j)
-                if i == -1 and j == 0: return self.nw.get(i,j)
-                if i == 0 and j == -1: return self.se.get(i,j)
-                if i == 0 and j == 0: return self.ne.get(i,j)
-            if level == 0:
-                return self.alive
-            elif i < 0 and j < 0:
-                x = i + (1 << (level-2))
-                y = j + (1 << (level-2))
-                return self.sw.get(x, y)
-            elif i < 0 and j >= 0:
-                x = i + (1 << (level-2))
-                y = j - (1 << (level-2))
-                return self.nw.get(x, y)
-            elif i >= 0 and j < 0:
-                x = i - (1 << (level-2))
-                y = j + (1 << (level-2))
-                return self.se.get(x, y)
-            elif i >= 0 and j >= 0: 
-                x = i - (1 << (level-2))
-                y = j - (1 << (level-2))
-                return self.ne.get(x, y)
-            return False
             
 class CellNode(AbstractNode):
     def __init__(self, alive):
@@ -495,16 +455,25 @@ class HashLifeUniverse(Universe):
     Question 11:
     """
     def get(self, i, j):
-            root = self._root
-            return root.get(i, j)
+        try:
+            level = self._root.level
+            if i == 0 and j == 0: return self._root.alive
+            x = (i<<1) + (1 << (level - 1))
+            y = (j<<1) + (1 << (level - 1))
+            if i < 0 and j < 0: return self._root.nw.get(x, y)
+            if i < 0 and j > 0: return self._root.sw.get(x, y)
+            if i > 0 and j < 0: return self._root.ne.get(x, y)
+            if i > 0 and j > 0: return self._root.se.get(x, y)
+            return None
+        except AttributeError:
+            return False
     
     """
     Question 12:
     """
     def extend(self, k):
         treeExtended =  self._root.extend()
-        while treeExtended.level < max(k, 2): 
-            treeExtended = treeExtended.extend()
+        while treeExtended.level < max(k, 2): treeExtended = treeExtended.extend()
         return treeExtended
 
     def rounds(self, n):
